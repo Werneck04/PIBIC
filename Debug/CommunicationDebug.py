@@ -15,6 +15,7 @@ N_tx = 4       # Antenas por UE
 AREA_SIZE = 100  # Área de 100x100 m^2
 H_AP = 11.5    # Altura do AP [m]
 H_UE = 1.5     # Altura do UE [m]
+H_TGT = 0.0    # Altura do Alvo [m]
 AP_GRID_N = int(np.sqrt(M)) # APs em uma grade 4x4
 AP_SPACING = AREA_SIZE / (AP_GRID_N - 1) if AP_GRID_N > 1 else 0
 
@@ -93,17 +94,20 @@ def get_path_loss_shadowing(dist_3d, h_1, h_2):
     return beta
 
 def create_rician_channel(tx_pos, rx_pos, N_tx, N_rx, beta, rician_k_db):
-    """
-    Cria um canal Rician (LoS + Multipath NLoS)
-    """
     K_lin = 10**(rician_k_db / 10)
 
     # 1. Componente LoS (Geométrico)
+    # Ângulo de partida (TX → RX)
     aod_theta, aod_phi = get_angles(tx_pos, rx_pos)
     a_tx = get_steering_vector(aod_theta, aod_phi, N_tx)
+
+    # Ângulo de chegada (RX ← TX)
     aoa_theta, aoa_phi = get_angles(rx_pos, tx_pos)
     a_rx = get_steering_vector(aoa_theta, aoa_phi, N_rx)
+
+    # Matriz LoS
     H_los = a_rx @ a_tx.conj().T
+
 
     # 2. Componente NLoS (Multipath aleatório, modelo Rayleigh)
     H_nlos = (np.random.randn(N_rx, N_tx) + 1j * np.random.randn(N_rx, N_tx)) / np.sqrt(2)
@@ -143,17 +147,12 @@ def get_angular_beamforming_comm(ue_pos, ap_positions, ap_betas):
     w_bf = get_steering_vector(aod_theta, aod_phi, N_tx)
     return w_bf / l2norm(w_bf)
 
-# 4. Função de Cálculo de SINR (Corrigida)
+# 4. Função de Cálculo de SINR
 def calculate_sinr(k_user,
                    all_H_c_to_comm,
                    all_w_c,
                    rho_c_vec):
-    """
-    Calcula SINR corretamente:
-    - Sinal: |H_k @ w_k|^2 * rho_k
-    - Interferência: soma de |H_j @ w_k|^2 * rho_j para j != k
-    - Ruído: |w_k|^2 * sigma_n^2
-    """
+    
     H_k_u = all_H_c_to_comm[k_user]
     w_k_u = all_w_c[k_user]
     rho_k_u = rho_c_vec[k_user]
